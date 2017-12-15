@@ -70,8 +70,8 @@ static int xmp_getattr(const char *path, struct stat *stbuf)
 
 	struct stat tmp;
 	res = lstat(fullpaths[1], &tmp);
-	if (res == -1)
-		return -errno;
+//	if (res == -1)
+//		return -errno;
 	stbuf->st_size += tmp.st_size;
 
 	printf("getattr done\n");
@@ -391,10 +391,8 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
   (void) fi;
 
   int rsize = 0;
-  int tread = 0;
   int lsize = size;
-  int i = 0;
-  while(1)
+  for(int i = 0; 1; i++)
   {
 	  if(lsize == 0)
 		  break;
@@ -416,11 +414,8 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 	  if (res == -1)
 		  res = -errno;
 	  close(fd);
-	  tread += rsize;
-	  if((!i%2))
-		  offset += rsize;
-	  i++;
   }
+  printf("read done\n");
   return res;
 }
 
@@ -436,20 +431,35 @@ static int xmp_write(const char *path, const char *buf, size_t size,
   sprintf(fullpaths[0], "%s%s", global_context.driveA, path);
   sprintf(fullpaths[1], "%s%s", global_context.driveB, path);
 
-  for (int i = 0; i < 2; ++i) {
-    const char* fullpath = fullpaths[i];
+  int wsize = 0;
+  int rsize = size;
+  for(int i = 0; 1; i++)
+  {
+	  if(rsize == 0)
+		  break;
+	  else if(rsize > 512)
+	  {
+		  wsize = 512;
+		  rsize -= 512;
+	  }
+	  else
+	  {
+		  wsize = rsize;
+		  rsize = 0;
+	  }
 
-    fd = open(fullpath, O_WRONLY);
-    if (fd == -1)
-      return -errno;
+	  fd = open(fullpaths[i%2], O_WRONLY);
+	  if (fd == -1)
+		  return -errno;
 
-    res = pwrite(fd, buf, size, offset);
-    if (res == -1)
-      res = -errno;
+	  res = pwrite(fd, buf+(512*i), wsize, offset);
+	  if (res == -1)
+		  res = -errno;
 
-    close(fd);
+	  close(fd);
   }
 
+  printf("write done\n");
   return res;
 }
 
@@ -543,14 +553,21 @@ static int xmp_setxattr(const char *path, const char *name, const char *value,
 static int xmp_getxattr(const char *path, const char *name, char *value,
     size_t size)
 {
-  char fullpath[PATH_MAX];
+  char fullpaths[2][PATH_MAX];
 
-  sprintf(fullpath, "%s%s",
-      rand() % 2 == 0 ? global_context.driveA : global_context.driveB, path);
+//  sprintf(fullpath, "%s%s",
+//      rand() % 2 == 0 ? global_context.driveA : global_context.driveB, path);
 
-  int res = lgetxattr(fullpath, name, value, size);
-  if (res == -1)
-    return -errno;
+  sprintf(fullpaths[0], "%s%s", global_context.driveA, path);
+  sprintf(fullpaths[1], "%s%s", global_context.driveB, path);
+
+  int res;
+  for(int i = 0; i < 2; i++)
+  {
+  	res = lgetxattr(fullpaths[i], name, value, size);
+  	if (res == -1)
+		return -errno;
+  }
   return res;
 }
 
