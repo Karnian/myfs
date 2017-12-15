@@ -55,16 +55,26 @@ static struct {
 
 static int xmp_getattr(const char *path, struct stat *stbuf)
 {
-  char fullpath[PATH_MAX];
+  char fullpaths[2][PATH_MAX];
 	int res;
 
-  sprintf(fullpath, "%s%s",
-      rand() % 2 == 0 ? global_context.driveA : global_context.driveB, path);
+//  sprintf(fullpath, "%s%s",
+//      rand() % 2 == 0 ? global_context.driveA : global_context.driveB, path);
 
-	res = lstat(fullpath, stbuf);
+	sprintf(fullpaths[0], "%s%s", global_context.driveA, path);
+	sprintf(fullpaths[1], "%s%s", global_context.driveB, path);
+
+	res = lstat(fullpaths[0], stbuf);
 	if (res == -1)
 		return -errno;
 
+	struct stat tmp;
+	res = lstat(fullpaths[1], &tmp);
+	if (res == -1)
+		return -errno;
+	stbuf->st_size += tmp.st_size;
+
+	printf("getattr done\n");
 	return 0;
 }
 
@@ -370,22 +380,47 @@ static int xmp_open(const char *path, struct fuse_file_info *fi)
 static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
 {
-  char fullpath[PATH_MAX];
+  char fullpaths[2][PATH_MAX];
   int fd;
   int res;
 
-  sprintf(fullpath, "%s%s",
-      rand() % 2 == 0 ? global_context.driveA : global_context.driveB, path);
+//  sprintf(fullpath, "%s%s",
+//      rand() % 2 == 0 ? global_context.driveA : global_context.driveB, path);
+  sprintf(fullpaths[0], "%s%s", global_context.driveA, path);
+  sprintf(fullpaths[1], "%s%s", global_context.driveB, path);
   (void) fi;
-  fd = open(fullpath, O_RDONLY);
-  if (fd == -1)
-    return -errno;
 
-  res = pread(fd, buf, size, offset);
-  if (res == -1)
-    res = -errno;
+  int rsize = 0;
+  int tread = 0;
+  int lsize = size;
+  int i = 0;
+  while(1)
+  {
+	  if(lsize == 0)
+		  break;
+	  else if(lsize > 512)
+	  {
+		  rsize = 512;
+		  lsize -= 512;
+	  }
+	  else
+	  {
+		  rsize = lsize;
+		  lsize = 0;
+	  }
 
-  close(fd);
+	  fd = open(fullpaths[i%2], O_RDONLY);
+	  if (fd == -1)
+		  return -errno;
+	  res = pread(fd, buf+(512)*i, rsize, offset);
+	  if (res == -1)
+		  res = -errno;
+	  close(fd);
+	  tread += rsize;
+	  if((!i%2))
+		  offset += rsize;
+	  i++;
+  }
   return res;
 }
 
